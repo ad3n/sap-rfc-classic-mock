@@ -1,0 +1,12 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/ad3n/sap-rfc-classic-mock/internal/classic
+cpu: Apple M3 Pro
+BenchmarkEncodeStructureInto-12    	15151912	        66.61 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncodeStructureInto-12    	18970394	        63.84 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncodeStructureInto-12    	18621841	        63.66 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncodeStructureInto-12    	18935919	        64.41 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncodeStructureInto-12    	18557538	        68.27 ns/op	       0 B/op	       0 allocs/op
+BenchmarkEncodeStructureInto-12    	18409107	        63.82 ns/op	       0 B/op	       0 allocs/op
+PASS
+ok  	github.com/ad3n/sap-rfc-classic-mock/internal/classic	7.439s

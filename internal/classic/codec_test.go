@@ -1,9 +1,11 @@
 package classic
 
 import (
+	"bytes"
 	"encoding/binary"
 	"reflect"
 	"testing"
+	"unicode/utf16"
 
 	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
 )
@@ -98,5 +100,78 @@ func TestXMLStructure(t *testing.T) {
 		if _, err := decodeXML(p, []byte(input)); err == nil {
 			t.Fatalf("invalid XML accepted: %s", input)
 		}
+	}
+}
+
+func TestCharsMatchesUTF16(t *testing.T) {
+	for _, text := range []string{"", "Lawang", "世界😀", "😀😀", "a\xffb", "x\x00y"} {
+		units := utf16.Encode([]rune(text))
+		for width := 0; width < 16; width++ {
+			want := make([]byte, width*2)
+			for i := range width {
+				unit := uint16(' ')
+				if i < len(units) {
+					unit = units[i]
+				}
+
+				binary.LittleEndian.PutUint16(want[i*2:], unit)
+			}
+
+			if got := chars(text, width); !bytes.Equal(got, want) {
+				t.Fatalf("text %q width %d: %x != %x", text, width, got, want)
+			}
+		}
+	}
+}
+
+func TestEncodeIntoReusedBuffer(t *testing.T) {
+	p := config.Parameter{Type: "STRUCTURE", Fields: []config.Field{
+		{Name: "CODE", Type: "CHAR", Length: 5},
+		{Name: "QUANTITY", Type: "INT"},
+		{Name: "PRICE", Type: "FLOAT"},
+	}}
+	first := map[string]any{"CODE": "世界", "QUANTITY": -7, "PRICE": 1.25}
+	saved, err := encode(p, first)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	original := bytes.Clone(saved)
+	dst := bytes.Repeat([]byte{0xff}, len(saved))
+	if err := encodeInto(dst, p, first); err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(dst, original) {
+		t.Fatalf("wire bytes: %x != %x", dst, original)
+	}
+
+	if err := encodeInto(dst, p, map[string]any{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if !bytes.Equal(saved, original) {
+		t.Fatal("independent output was modified")
+	}
+
+	if dst[10] != 0 || dst[11] != 0 {
+		t.Fatal("alignment padding was retained")
+	}
+
+	got, err := decode(p, dst, binary.LittleEndian)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if !reflect.DeepEqual(got, map[string]any{"CODE": "", "QUANTITY": 0, "PRICE": float64(0)}) {
+		t.Fatalf("initial fields: %#v", got)
+	}
+
+	if allocs := testing.AllocsPerRun(100, func() {
+		if err := encodeInto(dst, p, first); err != nil {
+			panic(err)
+		}
+	}); allocs != 0 {
+		t.Fatalf("encodeInto allocated %g times", allocs)
 	}
 }

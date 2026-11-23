@@ -46,26 +46,53 @@ func dimensions(p config.Parameter, unicode bool) (int, int) {
 	case "FLOAT", "STRING":
 		return 8, 8
 	case "STRUCTURE", "TABLE":
-		l := geometry(p.Fields, unicode)
-		return l.size, 1
+		size, maximum := 0, 1
+		for _, f := range p.Fields {
+			width, alignment := dimensions(f.Parameter(), unicode)
+			maximum = max(maximum, alignment)
+			size = aligned(size, alignment) + width
+		}
+
+		return aligned(size, maximum), 1
 	}
 
 	return 0, 1
 }
 
 func chars(s string, width int) []byte {
-	units := utf16.Encode([]rune(s))
 	result := make([]byte, width*2)
-	for i := range width {
-		unit := uint16(' ')
-		if i < len(units) {
-			unit = units[i]
+	writeChars(result, s)
+	return result
+}
+
+func writeChars(dst []byte, s string) {
+	offset := 0
+	for _, r := range s {
+		if offset == len(dst) {
+			break
 		}
 
-		binary.LittleEndian.PutUint16(result[i*2:], unit)
+		if r <= 0xffff {
+			binary.LittleEndian.PutUint16(dst[offset:], uint16(r))
+			offset += 2
+			continue
+		}
+
+		high, low := utf16.EncodeRune(r)
+		binary.LittleEndian.PutUint16(dst[offset:], uint16(high))
+		offset += 2
+		if offset == len(dst) {
+			break
+		}
+
+		binary.LittleEndian.PutUint16(dst[offset:], uint16(low))
+		offset += 2
 	}
 
-	return result
+	for offset < len(dst) {
+		binary.LittleEndian.PutUint16(dst[offset:], ' ')
+		offset += 2
+	}
 }
 
 func integer(n int) []byte {
@@ -131,43 +158,59 @@ func decode(p config.Parameter, data []byte, order binary.ByteOrder) (any, error
 }
 
 func encode(p config.Parameter, value any) ([]byte, error) {
+	if p.Type == "STRING" {
+		if value == nil {
+			value = ""
+		}
+
+		return append([]byte(value.(string)), 0), nil
+	}
+
+	width, _ := dimensions(p, true)
+	result := make([]byte, width)
+	if err := encodeInto(result, p, value); err != nil {
+		return nil, err
+	}
+
+	return result, nil
+}
+
+func encodeInto(dst []byte, p config.Parameter, value any) error {
 	if value == nil {
 		value = initial(p)
 	}
 
 	switch p.Type {
 	case "CHAR":
-		return chars(value.(string), p.Length), nil
-	case "STRING":
-		return append([]byte(value.(string)), 0), nil
+		writeChars(dst, value.(string))
 	case "INT":
-		return integer(value.(int)), nil
+		binary.LittleEndian.PutUint32(dst, uint32(value.(int)))
 	case "FLOAT":
 		number, ok := value.(float64)
 		if !ok {
 			number = float64(value.(int))
 		}
 
-		result := make([]byte, 8)
-		binary.LittleEndian.PutUint64(result, math.Float64bits(number))
-		return result, nil
+		binary.LittleEndian.PutUint64(dst, math.Float64bits(number))
 	case "STRUCTURE":
-		l := geometry(p.Fields, true)
-		result := make([]byte, l.size)
+		clear(dst)
 		object := value.(map[string]any)
-		for i, f := range p.Fields {
-			bytes, err := encode(f.Parameter(), object[f.Name])
-			if err != nil {
-				return nil, err
+		offset := 0
+		for _, f := range p.Fields {
+			field := f.Parameter()
+			width, alignment := dimensions(field, true)
+			offset = aligned(offset, alignment)
+			if err := encodeInto(dst[offset:offset+width], field, object[f.Name]); err != nil {
+				return err
 			}
 
-			copy(result[l.offsets[i]:], bytes)
+			offset += width
 		}
-
-		return result, nil
+	default:
+		return fmt.Errorf("unsupported encode type %s", p.Type)
 	}
 
-	return nil, fmt.Errorf("unsupported encode type %s", p.Type)
+	return nil
 }
 
 func initial(p config.Parameter) any {
