@@ -1,0 +1,33 @@
+version: '3'
+vars:
+  SAPNWRFC_HOME: '{{.SAPNWRFC_HOME | default "/usr/local/sap"}}'
+env:
+  DYLD_LIBRARY_PATH: '{{.SAPNWRFC_HOME}}/lib'
+  LD_LIBRARY_PATH: '{{.SAPNWRFC_HOME}}/lib'
+  CGO_ENABLED: '1'
+  CGO_CFLAGS: '-I{{.SAPNWRFC_HOME}}/include'
+  CGO_LDFLAGS: '-L{{.SAPNWRFC_HOME}}/lib -Wl,-rpath,{{.SAPNWRFC_HOME}}/lib'
+  GOCACHE: /tmp/rfc-server-go-cache
+tasks:
+  build:
+    cmds:
+      - docker buildx build --platform linux/amd64 --load -t rfc-server:{{.CLI_ARGS}} .
+      - docker tag rfc-server:{{.CLI_ARGS}} git.moklaar.cloud/lawang/rfc-server:latest
+      - docker tag rfc-server:{{.CLI_ARGS}} git.moklaar.cloud/lawang/rfc-server:{{.CLI_ARGS}}
+      - docker push git.moklaar.cloud/lawang/rfc-server:latest
+      - docker push git.moklaar.cloud/lawang/rfc-server:{{.CLI_ARGS}}
+  build-local:
+    cmds:
+      - go build -o bin/rfc-server ./cmd/rfc-server
+      - go build -o bin/rfc-call ./cmd/rfc-call
+  run:
+    cmds:
+      - go run ./cmd/rfc-server -config mock.yml
+  test:
+    cmds:
+      - go test -race -count=1 ./...
+  check:
+    cmds:
+      - betteralign -apply ./...
+      - betteralign ./...
+      - go vet ./...

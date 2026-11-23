@@ -1,0 +1,13 @@
+services:
+  rfc-mock:
+    image: git.moklaar.cloud/lawang/rfc-server:latest
+    ports:
+      - "3313:3313"
+    volumes:
+      - type: bind
+        source: ./mock.yml
+        target: /app/mock.yml
+        read_only: true
+        bind:
+          create_host_path: false
+    command: ["-config", "/app/mock.yml", "-listen-host", "0.0.0.0"]

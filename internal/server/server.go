@@ -18,7 +18,7 @@ import (
 	"unicode/utf16"
 	"unsafe"
 
-	"rfc-server/internal/config"
+	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
 )
 
 var (

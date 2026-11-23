@@ -5,7 +5,7 @@ import (
 	"reflect"
 	"testing"
 
-	"rfc-server/internal/config"
+	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
 )
 
 func TestAlignedStructure(t *testing.T) {

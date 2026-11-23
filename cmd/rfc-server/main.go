@@ -8,19 +8,24 @@ import (
 	"os/signal"
 	"syscall"
 
-	"rfc-server/internal/classic"
-	"rfc-server/internal/config"
-	"rfc-server/internal/server"
+	"github.com/ad3n/sap-rfc-classic-mock/internal/classic"
+	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
+	"github.com/ad3n/sap-rfc-classic-mock/internal/server"
 )
 
 func main() {
 	path := flag.String("config", "mock.yml", "YAML configuration")
+	listenHost := flag.String("listen-host", "", "override classic RFC listen host")
 	validate := flag.Bool("check", false, "validate configuration and exit")
 	flag.Parse()
 	cfg, err := config.Load(*path)
 	if err != nil {
 		log.Print(err)
 		os.Exit(1)
+	}
+
+	if *listenHost != "" {
+		cfg.ListenHost = *listenHost
 	}
 
 	if *validate {

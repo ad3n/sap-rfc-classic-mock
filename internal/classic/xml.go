@@ -8,7 +8,7 @@ import (
 	"strconv"
 	"strings"
 
-	"rfc-server/internal/config"
+	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
 )
 
 func decodeXML(p config.Parameter, data []byte) (any, error) {

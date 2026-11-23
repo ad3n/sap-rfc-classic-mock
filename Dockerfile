@@ -1,4 +1,3 @@
-# syntax=docker/dockerfile:1
 FROM golang:1.27.4-trixie AS builder
 
 ENV CGO_ENABLED=1 \
@@ -8,7 +7,6 @@ ENV CGO_ENABLED=1 \
 
 WORKDIR /src
 COPY go.mod go.sum ./
-COPY third_party/open-rfc-go ./third_party/open-rfc-go
 RUN go mod download
 
 COPY docker/nwrfcsdk /usr/local/sap/nwrfcsdk

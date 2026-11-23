@@ -1,15 +1,17 @@
-# RFC mock standalone untuk Lawang-Core
+# SAP RFC Classic Mock
+
+Go module: `github.com/ad3n/sap-rfc-classic-mock`.
 
 Server mock **SAP RFC klasik melalui TCP**, tanpa SAP Gateway dan tanpa SAP ABAP backend. Nama function, parameter, schema `STRUCTURE`/`TABLE`, serta output statis atau echo diatur lewat YAML.
 
-Client penguji memakai `github.com/ad3n/gonwrfc v1.0.11` dan SAP NetWeaver RFC SDK asli. Transport klasik server menggunakan implementasi protokol [open-rfc-go](https://github.com/oisee/open-rfc-go), dipin sebagai source lokal dengan adapter kecil. Provenance, commit, dan lisensi ada di [third_party/open-rfc-go/PROVENANCE.md](third_party/open-rfc-go/PROVENANCE.md). API server SDK SAP sendiri menyediakan registrasi Gateway dan standalone WebSocket; transport klasik standalone ini tidak memakai API server SDK.
+Client penguji memakai `github.com/ad3n/gonwrfc v1.0.11` dan SAP NetWeaver RFC SDK asli. Transport klasik server menggunakan module [github.com/ad3n/open-rfc-go](https://github.com/ad3n/open-rfc-go) melalui package `mockbridge`. Patch protokol, adapter, tes, dan provenance dikelola di repo tersebut. API server SDK SAP sendiri menyediakan registrasi Gateway dan standalone WebSocket; transport klasik standalone ini tidak memakai API server SDK.
 
 ## Jalankan
 
 Prasyarat build: Go 1.27.3+, C compiler, dan SAP NetWeaver RFC SDK sesuai arsitektur. SDK digunakan client penguji dan mode WebSocket lama; library SAP tidak didistribusikan dalam repo. Pengujian lokal memakai SDK 7.50 PL18 macOS arm64.
 
 ```sh
-make run SAPNWRFC_HOME="$HOME/nwrfcsdk"
+task run SAPNWRFC_HOME="$HOME/nwrfcsdk"
 ```
 
 Konfigurasi default [mock.yml](mock.yml):
@@ -23,7 +25,7 @@ port: 3313
 Server menerima kredensial apa pun untuk simulasi, tanpa SNC/TLS. Bind default hanya loopback. Untuk container/mesin lain, ubah `listen_host` ke alamat interface yang sesuai atau `0.0.0.0` di jaringan testing. Jangan dipakai sebagai server production.
 
 ```sh
-make build SAPNWRFC_HOME="$HOME/nwrfcsdk"
+task build-local SAPNWRFC_HOME="$HOME/nwrfcsdk"
 export DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" # macOS
 # export LD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" # Linux
 ./bin/rfc-server -config mock.yml -check
@@ -32,7 +34,39 @@ export DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" # macOS
 
 Ctrl+C menghentikan listener dan koneksi aktif. Restart server setelah perubahan YAML. Restart proses client/worker ketika schema function berubah; reconnect saja belum tentu membersihkan cache metadata SDK. Koneksi testing dibatasi sampai lima menit per sesi.
 
+## Docker Compose
+
+```sh
+docker compose up -d
+docker compose logs -f rfc-mock
+docker compose exec rfc-mock rfc-call -params '{"REQUTEXT":"Hello Compose"}'
+docker compose down
+```
+
+Jika subcommand `docker compose` belum tersedia, gunakan `docker-compose` untuk perintah yang sama (binary ini tersedia pada mesin pengujian).
+
+[docker-compose.yml](docker-compose.yml) memakai image registry dan mem-publish port
+`3313`, dan me-mount `./mock.yml` dari host ke `/app/mock.yml` secara read-only.
+Lawang-Core di host memakai `127.0.0.1:13`. Opsi `-listen-host 0.0.0.0` mengoverride
+binding listener untuk container tanpa mengubah file YAML host. Config dibaca saat
+startup; setelah mengubah YAML, jalankan `docker compose restart rfc-mock`. Restart
+juga proses client/worker jika schema RFC berubah agar cache metadata diperbarui.
+
+Implementasi protokol memakai module `github.com/ad3n/open-rfc-go v0.0.1`.
+Build mengambil dependency dari rilis tersebut tanpa membutuhkan repo lokal.
+
 ## Docker
+
+Build dan push mengikuti pola Taskfile Lawang-Core:
+
+```sh
+docker login git.moklaar.cloud
+task build -- 0.0.1
+```
+
+Ganti `0.0.1` dengan tag image yang ingin dirilis. Task ini membangun image
+`linux/amd64`, lalu push `git.moklaar.cloud/lawang/rfc-server:latest` dan tag
+versi yang diberikan. `--load` menyediakan image lokal untuk langkah tag/push.
 
 SDK Linux x86-64 sudah disalin dari `lawang-core/docker/nwrfcsdk` ke `docker/nwrfcsdk`.
 Build image menggunakan platform yang sesuai library tersebut:
@@ -161,15 +195,15 @@ Default `-host 127.0.0.1 -port 3313 -transport classic`. Client mengonversi port
 ## Verifikasi dan batas kompatibilitas
 
 ```sh
-make check SAPNWRFC_HOME="$HOME/nwrfcsdk"
-make test SAPNWRFC_HOME="$HOME/nwrfcsdk"
+task check SAPNWRFC_HOME="$HOME/nwrfcsdk"
+task test SAPNWRFC_HOME="$HOME/nwrfcsdk"
 # integration test, server mock.yml harus berjalan sebagai proses terpisah:
-RFC_MOCK_INTEGRATION=1 make test SAPNWRFC_HOME="$HOME/nwrfcsdk"
+RFC_MOCK_INTEGRATION=1 task test SAPNWRFC_HOME="$HOME/nwrfcsdk"
 ```
 
 Pengujian native mencakup ping, metadata/DDIC, Unicode, scalar, echo struktur, output tabel statis, tabel kosong, 128 baris input, dan empat koneksi paralel. Server dan client diuji dengan race detector.
 
-`betteralign` diperlukan untuk `make check`. Integration test dilewati tanpa `RFC_MOCK_INTEGRATION=1`; `RFC_MOCK_PORT` dapat mengubah port testing dalam rentang 3300–3399.
+`betteralign` diperlukan untuk `task check`. Integration test dilewati tanpa `RFC_MOCK_INTEGRATION=1`; `RFC_MOCK_PORT` dapat mengubah port testing dalam rentang 3300–3399.
 
 Target kompatibilitas adalah synchronous RFC yang dipakai gonwrfc/SAP SDK dengan schema yang didukung. Ini bukan emulasi penuh SAP application server atau produk SAP tersertifikasi. Belum mendukung SNC, autentikasi SAP, message-server/load-balancing, tRFC/qRFC, SAP LZH compressed table input, transactional BAPI semantics, `DATE`/`BCD`, nested/deep types, atau arbitrary ABAP exceptions. Nama function BAPI bisa dimock, tetapi efek transaksi hanya sebatas output YAML.
 

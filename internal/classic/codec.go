@@ -8,7 +8,7 @@ import (
 	"unicode/utf16"
 	"unicode/utf8"
 
-	"rfc-server/internal/config"
+	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
 )
 
 type layout struct {

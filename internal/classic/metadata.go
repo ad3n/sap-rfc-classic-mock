@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strconv"
 
-	wire "github.com/oisee/open-rfc-go/mockbridge"
-	"rfc-server/internal/config"
+	wire "github.com/ad3n/open-rfc-go/mockbridge"
+	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
 )
 
 func typeName(p config.Parameter) string {
