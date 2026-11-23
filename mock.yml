@@ -1,0 +1,76 @@
+transport: classic
+listen_host: 127.0.0.1
+port: 3313
+functions:
+  - name: STFC_CONNECTION
+    parameters:
+      - name: REQUTEXT
+        direction: import
+        type: CHAR
+        length: 255
+      - name: ECHOTEXT
+        direction: export
+        type: CHAR
+        length: 255
+        from: REQUTEXT
+      - name: RESPTEXT
+        direction: export
+        type: CHAR
+        length: 255
+        value: "Hello from RFC mock Lawang-Core"
+  - name: Z_LAWANG_TEST
+    parameters:
+      - name: IV_NAME
+        direction: import
+        type: STRING
+      - name: EV_NAME
+        direction: export
+        type: STRING
+        from: IV_NAME
+      - name: EV_STATUS
+        direction: export
+        type: STRING
+        value: SUCCESS
+      - name: EV_COUNT
+        direction: export
+        type: INT
+        value: 3
+      - name: EV_RATIO
+        direction: export
+        type: FLOAT
+        value: 1.25
+      - name: CV_COUNTER
+        direction: changing
+        type: INT
+        from: CV_COUNTER
+  - name: Z_LAWANG_DATA
+    parameters:
+      - name: IS_HEADER
+        direction: import
+        type: STRUCTURE
+        fields: &item_fields
+          - {name: CODE, type: CHAR, length: 5}
+          - {name: QUANTITY, type: INT}
+          - {name: PRICE, type: FLOAT}
+      - name: ES_HEADER
+        direction: export
+        type: STRUCTURE
+        fields: *item_fields
+        from: IS_HEADER
+      - name: ES_DEFAULT
+        direction: export
+        type: STRUCTURE
+        fields: *item_fields
+        value: {CODE: TEST, QUANTITY: 7, PRICE: 2.5}
+      - name: T_ITEMS
+        direction: tables
+        type: TABLE
+        fields: *item_fields
+        value:
+          - {CODE: A001, QUANTITY: 2, PRICE: 12.5}
+          - {CODE: B002, QUANTITY: 3, PRICE: 7.25}
+      - name: T_ECHO
+        direction: tables
+        type: TABLE
+        fields: *item_fields
+        from: T_ECHO
