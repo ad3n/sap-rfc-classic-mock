@@ -1,14 +1,15 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"flag"
 	"fmt"
 	"log"
 	"os"
-	"strconv"
+	"time"
 
-	"github.com/ad3n/gonwrfc/gorfc"
+	"github.com/ad3n/open-rfc-go/rfc"
 )
 
 func main() {
@@ -20,8 +21,8 @@ func main() {
 
 func run() error {
 	host := flag.String("host", "127.0.0.1", "RFC host")
-	port := flag.String("port", "3313", "RFC port (classic: 3300..3399)")
-	transport := flag.String("transport", "classic", "classic or websocket")
+	port := flag.Int("port", 3313, "RFC port (3300..3399)")
+	transport := flag.String("transport", "classic", "RFC transport (classic)")
 	describe := flag.Bool("describe", false, "print function metadata")
 	function := flag.String("function", "STFC_CONNECTION", "RFC function")
 	input := flag.String("params", `{"REQUTEXT":"Hello Lawang"}`, "JSON input parameters")
@@ -31,48 +32,41 @@ func run() error {
 		return err
 	}
 
-	connection := gorfc.ConnectionParameters{"user": "MOCK", "passwd": "MOCK", "client": "000", "lang": "EN"}
-	switch *transport {
-	case "classic":
-		n, err := strconv.Atoi(*port)
-		if err != nil || n < 3300 || n > 3399 {
-			return fmt.Errorf("classic port must be 3300..3399 (sysnr 00..99)")
-		}
-
-		connection["ashost"] = *host
-		connection["sysnr"] = fmt.Sprintf("%02d", n-3300)
-	case "websocket":
-		connection["wshost"], connection["wsport"], connection["use_tls"] = *host, *port, "0"
-	default:
+	if *transport != "classic" {
 		return fmt.Errorf("unknown transport %q", *transport)
 	}
 
-	conn, err := gorfc.ConnectionFromParams(connection)
+	if *port < 3300 || *port > 3399 {
+		return fmt.Errorf("classic port must be 3300..3399 (sysnr 00..99)")
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	client, err := rfc.Open(ctx, rfc.Destination{
+		Host: *host, Port: *port, Service: fmt.Sprintf("sapdp%02d", *port-3300),
+		Client: "000", User: "MOCK", Password: "MOCK", Language: "E",
+	})
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer client.Close(context.WithoutCancel(ctx))
 
-	var result any
-	if *describe {
-		result, err = conn.GetFunctionDescription(*function)
+	description, err := client.DescribeTool(ctx, *function)
+	if err != nil {
+		return err
 	}
 
+	var result any = description
 	if !*describe {
-		description, describeErr := conn.GetFunctionDescription(*function)
-		if describeErr != nil {
-			return describeErr
-		}
-
-		if err := normalizeInput(params, description); err != nil {
+		if err := validateInput(params, description.InputSchema, ""); err != nil {
 			return err
 		}
 
-		result, err = conn.Call(*function, params)
-	}
-
-	if err != nil {
-		return err
+		result, err = client.Call(ctx, *function, params)
+		if err != nil {
+			return err
+		}
 	}
 
 	data, err := json.MarshalIndent(result, "", "  ")

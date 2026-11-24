@@ -64,9 +64,26 @@ func interfaceHandler(functions map[string]config.Function) wire.Handler {
 			rows = append(rows, row)
 		}
 
+		responseTables := tables(req, "PARAMS", 402, rows)
+		for _, table := range req.Tables {
+			if table.Name == "RESUMABLE_EXCEPTIONS" {
+				responseTables = append(responseTables, wire.Table{Name: table.Name, ID: table.ID, RowByteLength: table.RowByteLength})
+				break
+			}
+		}
+
+		if len(responseTables) == 1 {
+			for _, output := range req.RequestedOutputs {
+				if output == "RESUMABLE_EXCEPTIONS" {
+					responseTables = append(responseTables, wire.Table{Name: output})
+					break
+				}
+			}
+		}
+
 		return wire.Response{
 			Exports: []wire.NamedValue{{Name: "REMOTE_CALL", Value: chars("R", 1)}, {Name: "REMOTE_BASXML_SUPPORTED", Value: chars("", 1)}, {Name: "UPDATE_TASK", Value: chars("", 1)}},
-			Tables:  tables(req, "PARAMS", 402, rows),
+			Tables:  responseTables,
 		}, nil
 	}
 }

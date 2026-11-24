@@ -1,12 +1,5 @@
 version: '3'
-vars:
-  SAPNWRFC_HOME: '{{.SAPNWRFC_HOME | default "/usr/local/sap"}}'
 env:
-  DYLD_LIBRARY_PATH: '{{.SAPNWRFC_HOME}}/lib'
-  LD_LIBRARY_PATH: '{{.SAPNWRFC_HOME}}/lib'
-  CGO_ENABLED: '1'
-  CGO_CFLAGS: '-I{{.SAPNWRFC_HOME}}/include'
-  CGO_LDFLAGS: '-L{{.SAPNWRFC_HOME}}/lib -Wl,-rpath,{{.SAPNWRFC_HOME}}/lib'
   GOCACHE: /tmp/rfc-server-go-cache
 tasks:
   build:

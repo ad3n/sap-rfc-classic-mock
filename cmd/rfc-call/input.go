@@ -6,8 +6,6 @@ import (
 	"io"
 	"math"
 	"strings"
-
-	"github.com/ad3n/gonwrfc/gorfc"
 )
 
 func parseInput(input string) (map[string]any, error) {
@@ -30,103 +28,53 @@ func parseInput(input string) (map[string]any, error) {
 	return params, nil
 }
 
-func normalizeInput(params map[string]any, description gorfc.FunctionDescription) error {
-	for _, parameter := range description.Parameters {
-		value, ok := params[parameter.Name]
-		if !ok {
-			continue
-		}
-
-		normalized, err := normalizeValue(value, parameter.ParameterType, parameter.TypeDesc, parameter.Name)
-		if err != nil {
-			return err
-		}
-
-		params[parameter.Name] = normalized
-	}
-
-	return nil
-}
-
-func normalizeValue(value any, kind string, description gorfc.TypeDescription, path string) (any, error) {
-	kind = strings.TrimPrefix(kind, "RFCTYPE_")
-	switch kind {
-	case "STRUCTURE":
+func validateInput(value any, schema map[string]any, path string) error {
+	switch schema["type"] {
+	case "object":
 		object, ok := value.(map[string]any)
 		if !ok {
-			return nil, fmt.Errorf("%s: expected an object", path)
+			return fmt.Errorf("%s: expected an object", path)
 		}
 
-		for _, field := range description.Fields {
-			value, ok := object[field.Name]
+		properties, _ := schema["properties"].(map[string]any)
+		for name, value := range object {
+			field, ok := properties[name].(map[string]any)
 			if !ok {
 				continue
 			}
 
-			normalized, err := normalizeValue(value, field.FieldType, field.TypeDesc, path+"."+field.Name)
-			if err != nil {
-				return nil, err
+			fieldPath := name
+			if path != "" {
+				fieldPath = path + "." + name
 			}
 
-			object[field.Name] = normalized
+			if err := validateInput(value, field, fieldPath); err != nil {
+				return err
+			}
 		}
-
-		return object, nil
-	case "TABLE":
+	case "array":
 		rows, ok := value.([]any)
 		if !ok {
-			return nil, fmt.Errorf("%s: expected an array of objects", path)
+			return fmt.Errorf("%s: expected an array", path)
 		}
 
+		item, _ := schema["items"].(map[string]any)
 		for i, row := range rows {
-			normalized, err := normalizeValue(row, "STRUCTURE", description, fmt.Sprintf("%s[%d]", path, i))
-			if err != nil {
-				return nil, err
+			if err := validateInput(row, item, fmt.Sprintf("%s[%d]", path, i)); err != nil {
+				return err
 			}
-
-			rows[i] = normalized
+		}
+	case "integer":
+		number, ok := value.(json.Number)
+		if !ok {
+			break
 		}
 
-		return rows, nil
-	}
-
-	number, ok := value.(json.Number)
-	if !ok {
-		return value, nil
-	}
-
-	switch kind {
-	case "INT", "INT1", "INT2", "INT8":
 		n, err := number.Int64()
-		if err != nil {
-			return nil, fmt.Errorf("%s: %s requires an integer JSON literal, got %s", path, kind, number)
+		if err != nil || n < math.MinInt32 || n > math.MaxInt32 {
+			return fmt.Errorf("%s: expected a signed 32-bit integer, got %s", path, number)
 		}
-
-		minimum, maximum := int64(math.MinInt32), int64(math.MaxInt32)
-		switch kind {
-		case "INT1":
-			minimum, maximum = 0, math.MaxUint8
-		case "INT2":
-			minimum, maximum = math.MinInt16, math.MaxInt16
-		}
-
-		if n < minimum || n > maximum {
-			if kind == "INT8" {
-				return nil, fmt.Errorf("%s: gonwrfc v1.0.11 writes INT8 through a 32-bit setter; refusing value %s", path, number)
-			}
-
-			return nil, fmt.Errorf("%s: %s must be between %d and %d, got %s", path, kind, minimum, maximum, number)
-		}
-
-		return int(n), nil
-	case "FLOAT":
-		n, err := number.Float64()
-		if err != nil || math.IsInf(n, 0) || math.IsNaN(n) {
-			return nil, fmt.Errorf("%s: FLOAT value %s is out of range", path, number)
-		}
-
-		return n, nil
-	default:
-		return number.String(), nil
 	}
+
+	return nil
 }

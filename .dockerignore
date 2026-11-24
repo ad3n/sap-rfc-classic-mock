@@ -5,6 +5,7 @@
 .env
 .env.*
 bin
+docker
 *.log
 *.trc
 .DS_Store

@@ -4,14 +4,14 @@ Go module: `github.com/ad3n/sap-rfc-classic-mock`.
 
 Server mock **SAP RFC klasik melalui TCP**, tanpa SAP Gateway dan tanpa SAP ABAP backend. Nama function, parameter, schema `STRUCTURE`/`TABLE`, serta output statis atau echo diatur lewat YAML.
 
-Client penguji memakai `github.com/ad3n/gonwrfc v1.0.11` dan SAP NetWeaver RFC SDK asli. Transport klasik server menggunakan module [github.com/ad3n/open-rfc-go](https://github.com/ad3n/open-rfc-go) melalui package `mockbridge`. Patch protokol, adapter, tes, dan provenance dikelola di repo tersebut. API server SDK SAP sendiri menyediakan registrasi Gateway dan standalone WebSocket; transport klasik standalone ini tidak memakai API server SDK.
+Server dan client penguji memakai [github.com/ad3n/open-rfc-go](https://github.com/ad3n/open-rfc-go). Server memakai package `mockbridge` dan `rfc-call` memakai package `rfc`. Keduanya berjalan dengan Go murni.
 
 ## Jalankan
 
-Prasyarat build: Go 1.27.3+, C compiler, dan SAP NetWeaver RFC SDK sesuai arsitektur. SDK digunakan client penguji dan mode WebSocket lama; library SAP tidak didistribusikan dalam repo. Pengujian lokal memakai SDK 7.50 PL18 macOS arm64.
+Prasyarat build adalah Go 1.27.4 atau lebih baru.
 
 ```sh
-task run SAPNWRFC_HOME="$HOME/nwrfcsdk"
+task run
 ```
 
 Konfigurasi default [mock.yml](mock.yml):
@@ -25,14 +25,12 @@ port: 3313
 Server menerima kredensial apa pun untuk simulasi, tanpa SNC/TLS. Bind default hanya loopback. Untuk container/mesin lain, ubah `listen_host` ke alamat interface yang sesuai atau `0.0.0.0` di jaringan testing. Jangan dipakai sebagai server production.
 
 ```sh
-task build-local SAPNWRFC_HOME="$HOME/nwrfcsdk"
-export DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" # macOS
-# export LD_LIBRARY_PATH="$HOME/nwrfcsdk/lib" # Linux
+task build-local
 ./bin/rfc-server -config mock.yml -check
 ./bin/rfc-server -config mock.yml
 ```
 
-Ctrl+C menghentikan listener dan koneksi aktif. Restart server setelah perubahan YAML. Restart proses client/worker ketika schema function berubah; reconnect saja belum tentu membersihkan cache metadata SDK. Koneksi testing dibatasi sampai lima menit per sesi.
+Ctrl+C menghentikan listener dan koneksi aktif. Restart server setelah perubahan YAML. Restart proses client/worker ketika schema function berubah; reconnect saja belum tentu membersihkan cache metadata. Koneksi testing dibatasi sampai lima menit per sesi.
 
 ## Docker Compose
 
@@ -68,8 +66,7 @@ Ganti `0.0.1` dengan tag image yang ingin dirilis. Task ini membangun image
 `linux/amd64`, lalu push `git.moklaar.cloud/lawang/rfc-server:latest` dan tag
 versi yang diberikan. `--load` menyediakan image lokal untuk langkah tag/push.
 
-SDK Linux x86-64 sudah disalin dari `lawang-core/docker/nwrfcsdk` ke `docker/nwrfcsdk`.
-Build image menggunakan platform yang sesuai library tersebut:
+Contoh build dan run image lokal untuk `linux/amd64`:
 
 ```sh
 docker build --platform linux/amd64 -t rfc-server:local .
@@ -100,7 +97,7 @@ Jika Lawang-Core juga di Docker, gunakan network Docker yang sama dan alamat bac
 
 ## Lawang-Core: cukup ubah alamat backend
 
-Lawang-Core yang menggunakan `ashost`/`sysnr` dapat memakai host berikut, tanpa perubahan kode atau parameter WebSocket:
+Lawang-Core yang menggunakan `ashost`/`sysnr` dapat memakai host berikut, dengan konfigurasi RFC klasik yang sama:
 
 ```json
 {
@@ -125,7 +122,7 @@ Gabungkan field tersebut dengan konfigurasi endpoint/backend Anda yang sudah ada
 
 Contoh URL lengkap: `rfc://127.0.0.1:13`. Tidak perlu `wshost`, `wsport`, `use_tls`, Program ID, SM59, atau SAP Gateway. Untuk Lawang-Core di container, gunakan alamat mock yang bisa diakses container dan bind interface yang sesuai.
 
-Untuk alur RFC table/sync Lawang-Core, pilih function `Z_LAWANG_DATA`, output key `T_ITEMS`, dan fields `CODE`, `QUANTITY`, `PRICE`. Untuk hasil seluruh object, gunakan output key kosong. Instance dan konfigurasi endpoint Lawang-Core penuh tidak dijalankan dalam test repo ini; integration test menguji koneksi SDK dengan parameter yang sama dengan hasil parsing Lawang-Core.
+Untuk alur RFC table/sync Lawang-Core, pilih function `Z_LAWANG_DATA`, output key `T_ITEMS`, dan fields `CODE`, `QUANTITY`, `PRICE`. Untuk hasil seluruh object, gunakan output key kosong. Pengujian integrasi di repo ini menjalankan `open-rfc-go` terhadap mock lokal.
 
 ## YAML
 
@@ -181,7 +178,6 @@ Nama/field duplikat, tipe/arah tidak didukung, output salah tipe, field asing, n
 Dengan server tetap berjalan:
 
 ```sh
-export DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib"
 ./bin/rfc-call
 ./bin/rfc-call -function Z_LAWANG_TEST -params '{"IV_NAME":"Lawang","CV_COUNTER":42}'
 ./bin/rfc-call -function Z_LAWANG_DATA -describe
@@ -190,21 +186,19 @@ export DYLD_LIBRARY_PATH="$HOME/nwrfcsdk/lib"
 
 Angka pada `-params` dikonversi menurut metadata RFC, termasuk field di dalam struktur dan tabel. Gunakan literal integer seperti `2`, `-3`, atau `2147483647` untuk `INT`; pecahan, notasi eksponen pada `INT`, dan nilai di luar rentang ditolak dengan lokasi parameter (misalnya `T_ECHO[0].QUANTITY`). Untuk `FLOAT`, input `7`, `12.5`, dan `1.25e2` dapat digunakan. String seperti `"0002"` tetap berupa string.
 
-Default `-host 127.0.0.1 -port 3313 -transport classic`. Client mengonversi port `3300..3399` menjadi system number dan memakai `ashost`/`sysnr` saja. Kegagalan menghasilkan exit code nonzero. `-describe` mengambil metadata melalui jaringan.
+Default `-host 127.0.0.1 -port 3313 -transport classic`. Client mengonversi port `3300..3399` menjadi nama service `sapdpNN`. Kegagalan menghasilkan exit code nonzero. `-describe` mengambil metadata melalui jaringan dan menampilkan JSON Schema untuk parameter input dan output.
 
 ## Verifikasi dan batas kompatibilitas
 
 ```sh
-task check SAPNWRFC_HOME="$HOME/nwrfcsdk"
-task test SAPNWRFC_HOME="$HOME/nwrfcsdk"
+task check
+task test
 # integration test, server mock.yml harus berjalan sebagai proses terpisah:
-RFC_MOCK_INTEGRATION=1 task test SAPNWRFC_HOME="$HOME/nwrfcsdk"
+RFC_MOCK_INTEGRATION=1 task test
 ```
 
-Pengujian native mencakup ping, metadata/DDIC, Unicode, scalar, echo struktur, output tabel statis, tabel kosong, 128 baris input, dan empat koneksi paralel. Server dan client diuji dengan race detector.
+Pengujian integrasi mencakup metadata/DDIC, Unicode, scalar, echo struktur, output tabel statis, tabel kosong, 128 baris input, dan empat koneksi paralel. `task test` menjalankan race detector.
 
 `betteralign` diperlukan untuk `task check`. Integration test dilewati tanpa `RFC_MOCK_INTEGRATION=1`; `RFC_MOCK_PORT` dapat mengubah port testing dalam rentang 3300–3399.
 
 Target kompatibilitas adalah synchronous RFC yang dipakai gonwrfc/SAP SDK dengan schema yang didukung. Ini bukan emulasi penuh SAP application server atau produk SAP tersertifikasi. Belum mendukung SNC, autentikasi SAP, message-server/load-balancing, tRFC/qRFC, SAP LZH compressed table input, transactional BAPI semantics, `DATE`/`BCD`, nested/deep types, atau arbitrary ABAP exceptions. Nama function BAPI bisa dimock, tetapi efek transaksi hanya sebatas output YAML.
-
-Mode lama `transport: websocket` tetap tersedia untuk function scalar dengan `port: 8088`; client dapat memakai `-transport websocket -port 8088`. Mode itu tidak digunakan untuk koneksi Lawang-Core klasik di atas, dan parameter kompleks hanya diaktifkan pada transport `classic`.

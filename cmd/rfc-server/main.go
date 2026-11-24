@@ -10,7 +10,6 @@ import (
 
 	"github.com/ad3n/sap-rfc-classic-mock/internal/classic"
 	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
-	"github.com/ad3n/sap-rfc-classic-mock/internal/server"
 )
 
 func main() {
@@ -36,12 +35,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	run := classic.Run
-	if cfg.Transport == "websocket" {
-		run = server.Run
-	}
-
-	if err := run(ctx, cfg); err != nil {
+	if err := classic.Run(ctx, cfg); err != nil {
 		log.Print(err)
 		os.Exit(1)
 	}

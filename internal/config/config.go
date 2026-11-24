@@ -71,8 +71,8 @@ func Load(path string) (*Config, error) {
 }
 
 func (c *Config) Validate() error {
-	if c.Transport != "" && c.Transport != "classic" && c.Transport != "websocket" {
-		return fmt.Errorf("transport must be classic or websocket")
+	if c.Transport != "" && c.Transport != "classic" {
+		return fmt.Errorf("transport must be classic")
 	}
 
 	if c.Port < 1 || c.Port > 65535 {
@@ -105,10 +105,6 @@ func (c *Config) Validate() error {
 			case "import", "export", "changing", "tables":
 			default:
 				return fmt.Errorf("%s.%s: direction must be import, export, changing, or tables", fn.Name, p.Name)
-			}
-
-			if c.Transport == "websocket" && (p.Type == "STRUCTURE" || p.Type == "TABLE" || p.Direction == "tables") {
-				return fmt.Errorf("%s.%s: composite parameters require classic transport", fn.Name, p.Name)
 			}
 
 			if err := validateField(Field{Name: p.Name, Type: p.Type, Length: p.Length, Fields: p.Fields}, 0); err != nil {
