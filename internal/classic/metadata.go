@@ -5,10 +5,16 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strconv"
 
 	wire "github.com/ad3n/open-rfc-go/mockbridge"
 	"github.com/ad3n/sap-rfc-classic-mock/internal/config"
+)
+
+const (
+	functionInterfaceRowWidth = 402
+	resumableExceptionsTable  = "RESUMABLE_EXCEPTIONS"
 )
 
 func typeName(p config.Parameter) string {
@@ -64,21 +70,23 @@ func interfaceHandler(functions map[string]config.Function) wire.Handler {
 			rows = append(rows, row)
 		}
 
-		responseTables := tables(req, "PARAMS", 402, rows)
+		responseTables := tables(req, "PARAMS", functionInterfaceRowWidth, rows)
 		for _, table := range req.Tables {
-			if table.Name == "RESUMABLE_EXCEPTIONS" {
-				responseTables = append(responseTables, wire.Table{Name: table.Name, ID: table.ID, RowByteLength: table.RowByteLength})
-				break
+			if table.Name != resumableExceptionsTable {
+				continue
 			}
+
+			table.Rows = nil
+			if table.RowByteLength == 0 {
+				table.RowByteLength = functionInterfaceRowWidth
+			}
+
+			responseTables = append(responseTables, table)
+			break
 		}
 
-		if len(responseTables) == 1 {
-			for _, output := range req.RequestedOutputs {
-				if output == "RESUMABLE_EXCEPTIONS" {
-					responseTables = append(responseTables, wire.Table{Name: output})
-					break
-				}
-			}
+		if len(responseTables) == 1 && slices.Contains(req.RequestedOutputs, resumableExceptionsTable) {
+			responseTables = append(responseTables, wire.Table{Name: resumableExceptionsTable, RowByteLength: functionInterfaceRowWidth})
 		}
 
 		return wire.Response{
